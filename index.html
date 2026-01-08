@@ -1,0 +1,697 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>AI Python Coach 10 — Full (Login)</title>
+
+  <!-- CodeMirror 5 -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/mode/python/python.min.js"></script>
+
+  <!-- Hint -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/addon/hint/show-hint.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/addon/hint/show-hint.min.js"></script>
+
+  <!-- Pyodide (nạp động + fallback nhiều nguồn để ổn định trên GitHub Pages / mạng trường) -->
+  <script>
+    // Không thay đổi giao diện/chức năng: chỉ tăng độ ổn định tải Pyodide.
+    (function(){
+      const V = "0.25.1";
+      // Ưu tiên CDN trước để tránh bị treo lâu khi repo chưa có thư mục ./pyodide/
+      // Nếu bạn có upload ./pyodide/ (offline CDN) thì script sẽ tự chuyển sang dùng.
+      const bases = [
+        `https://cdn.jsdelivr.net/pyodide/v${V}/full/`,
+        `https://cdn.jsdelivr.net/npm/pyodide@${V}/full/`,
+        `https://unpkg.com/pyodide@${V}/full/`,
+        "./pyodide/"
+      ];
+      function loadScript(url, timeoutMs){
+        return new Promise((resolve, reject)=>{
+          const s = document.createElement('script');
+          s.src = url;
+          s.async = true;
+          s.crossOrigin = 'anonymous';
+          const t = setTimeout(()=>{
+            s.remove();
+            reject(new Error('timeout'));
+          }, timeoutMs || 15000);
+          s.onload = ()=>{ clearTimeout(t); resolve(url); };
+          s.onerror = ()=>{ clearTimeout(t); s.remove(); reject(new Error('error')); };
+          document.head.appendChild(s);
+        });
+      }
+
+      // Expose a promise so app code can await if needed.
+      window.__PYODIDE_SCRIPT_READY = window.__PYODIDE_SCRIPT_READY || (async ()=>{
+        if(window.loadPyodide) return {ok:true, from:'(cached)'};
+        for(const base of bases){
+          try{
+            await loadScript(base + 'pyodide.js', 20000);
+            if(window.loadPyodide) return {ok:true, from:base};
+          }catch(e){}
+        }
+        return {ok:false, from:null};
+      })();
+    })();
+  </script>
+
+  <link rel="stylesheet" href="./style.css">
+  <!-- Tránh request favicon.ico (404) trên GitHub Pages -->
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' ry='8' fill='%230a66ff'/%3E%3Ctext x='16' y='21' font-size='14' text-anchor='middle' fill='white' font-family='Arial'%3EAI%3C/text%3E%3C/svg%3E">
+
+  <!-- Skulpt (Python chạy trực tiếp trong trình duyệt, giảm phụ thuộc tải Pyodide/WASM) -->
+  <script src="./vendor/skulpt/skulpt.min.js"></script>
+  <script src="./vendor/skulpt/skulpt-stdlib.js"></script>
+</head>
+
+<body>
+
+<!-- ===== LOGIN (Học sinh / Giáo viên) ===== -->
+<div id="loginRoot" class="loginWrap">
+  <div class="loginCard">
+    <div class="loginHead">
+      <div class="loginBrand">
+        <div class="loginLogo" id="lgLogo">HS</div>
+        <div class="loginTitle">
+          <h1 id="lgTitle">Đăng nhập học sinh</h1>
+          <p id="lgSub">Dùng <b>Mã học sinh</b> để đăng nhập • Mật khẩu mặc định: <b>123456</b></p>
+        </div>
+      </div>
+      <span class="chip">Lớp: 10A1</span>
+    </div>
+
+    <div class="loginBody">
+      <div class="chips" style="margin-top:0;">
+        <button class="btn" id="tabStudent" style="border-radius:999px; padding:8px 12px;">Học sinh</button>
+        <button class="btn" id="tabTeacher" style="border-radius:999px; padding:8px 12px;">Giáo viên</button>
+        <span class="chip" id="lgHintChip">Gợi ý: hs1, hs2, hs3…</span>
+      </div>
+
+      <div class="row">
+        <div class="label" id="lgUserLabel">Mã học sinh</div>
+        <input id="lgUser" class="input" placeholder="Ví dụ: hs12" autocomplete="username" />
+      </div>
+      <div class="row">
+        <div class="label">Mật khẩu</div>
+        <input id="lgPass" class="input" type="password" placeholder="123456" autocomplete="current-password" />
+      </div>
+
+      <div class="row" style="grid-template-columns: 1fr; margin-top:14px;">
+        <button id="lgBtn" class="btn primary">Đăng nhập</button>
+      </div>
+
+      <div id="lgErr" class="err">Sai tài khoản hoặc mật khẩu.</div>
+      <div class="hint" id="lgNote">
+        * Học sinh: đăng nhập bằng <b>Mã học sinh</b> trong danh sách.<br>
+        * Giáo viên: tài khoản mặc định <b>gv</b> • mật khẩu <b>123456</b>.
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== APP ROOT (ẩn trước khi login) ===== -->
+<div id="appRoot">
+  <div class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">
+        <div class="logo">AI</div>
+        <div>
+          <h1>AI Python Coach 10 — Full</h1>
+          <p>Copilot-like • Think-Guard • Debug highlight • Nhật ký + báo cáo GV • Lộ trình mở khóa</p>
+        </div>
+      </div>
+
+      <div class="pill" id="userPill" title="Tài khoản đang đăng nhập" style="gap:10px;">
+        <span class="dot ok"></span>
+        <span id="userName">Học sinh</span>
+        <button class="btn" id="btnLogout" style="padding:7px 10px; border-radius:999px; font-size:12px;">Đăng xuất</button>
+      </div>
+
+      <div class="pill" title="Trạng thái Python">
+        <span id="pyDot" class="dot warn"></span>
+        <span id="pyStatus">Đang tải Python…</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="wrap">
+    <div class="grid" id="grid">
+      <!-- LEFT -->
+      <div class="card left" id="leftCard">
+        <div class="lessonHeader" id="lessonHeader">
+          <div class="lessonPick">
+            <div class="k" id="pickId">—</div>
+            <div class="t" id="pickTitle">Bài học</div>
+            <div class="s" id="pickSub">Bấm để mở danh sách</div>
+          </div>
+          <div class="chev" id="chev">▾</div>
+        </div>
+
+        <div class="lessonDrop" id="lessonDrop">
+          <div class="lessonSearch">
+            <div class="searchRow">
+              <input class="search" id="lessonSearch" placeholder="Tìm bài (vd: tổng, if, prime, list...)" />
+              <select class="search levelSel" id="levelFilter" aria-label="Chọn mức độ">
+                <option value="all">Tất cả</option>
+                <option value="easy">Dễ</option>
+                <option value="hard">Khó</option>
+                <option value="adv">Nâng cao</option>
+              </select>
+            </div>
+          </div>
+          <div class="lessonList" id="lessonList"></div>
+        </div>
+
+        <div class="card-b">
+          <div class="muted">
+            <b>Phím tắt:</b> Ctrl+Enter (Run) • Ctrl+Space (Gợi ý) • Tab (chèn ghost nếu đủ điều kiện) • Esc (ẩn ghost)
+          </div>
+          <div class="sep"></div>
+          <div class="muted">
+            <b>Lộ trình:</b> PASS bài trước → mở bài sau.
+          </div>
+        </div>
+      </div>
+
+      <!-- RIGHT -->
+      <div class="card">
+        <div class="card-h">
+          <div class="title">
+            <h3 id="taskTitle">—</h3>
+            <p id="taskDesc">—</p>
+          </div>
+          <div class="toolbar">
+            <button class="btn ghost" id="btnFocus">Focus</button>
+            <button class="btn ghost" id="btnScaffold">Nạp khung</button>
+            <button class="btn" id="btnSave">Lưu</button>
+            <button class="btn" id="btnExport">Xuất CSV</button>
+            <button class="btn" id="btnExam" title="Thi 15 phút (khóa gợi ý)">Thi 15\'</button>
+            <button class="btn" id="btnHelp" title="Gửi trợ giúp cho giáo viên">Trợ giúp</button>
+            <button class="btn" id="btnTest" disabled>Test</button>
+            <button class="btn primary" id="btnRun" disabled>Run</button>
+          </div>
+        </div>
+
+        <div class="card-b">
+          <!-- Hỗ trợ (chỉ thêm, không thay đổi luồng cũ) -->
+          <div id="helpBox" class="card" style="display:none; margin-bottom:12px; border-style:dashed;">
+            <div class="card-h">
+              <div class="title">
+                <h3 style="margin:0;font-size:14px;">Gửi trợ giúp cho giáo viên</h3>
+                <p style="margin:0;">Gửi kèm bài đang làm, code hiện tại và lỗi gần nhất (nếu có).</p>
+              </div>
+            </div>
+            <div class="card-b">
+              <div class="row" style="gap:10px; align-items:flex-start;">
+                <textarea id="helpNote" class="input" rows="3" placeholder="Mô tả ngắn: em đang kẹt ở đâu? (có thể ghi chú thêm)"></textarea>
+                <div style="min-width:180px; display:flex; flex-direction:column; gap:8px;">
+                  <button class="btn primary" id="btnSendHelp">Gửi</button>
+                  <button class="btn ghost" id="btnCloseHelp">Đóng</button>
+                </div>
+              </div>
+              <div class="muted" id="helpStatus" style="margin-top:8px;">—</div>
+              <div class="sep"></div>
+              <div id="helpPkgWrap" style="display:none;">
+                <div class="muted" style="margin-bottom:6px;">Mã trợ giúp (nếu giáo viên dùng máy khác):</div>
+                <textarea id="helpPackage" class="input" rows="3" readonly placeholder="Sau khi bấm Gửi, hệ thống tạo mã để bạn sao chép gửi cho giáo viên..."></textarea>
+                <div style="display:flex; gap:8px; margin-top:8px;">
+                  <button class="btn" id="btnCopyHelpPackage">Sao chép mã</button>
+                </div>
+                <div class="muted" id="helpPkgStatus" style="margin-top:8px;">—</div>
+              </div>
+
+            </div>
+          </div>
+
+          <div class="toolbar" style="margin-bottom:10px;">
+            <select id="levelSel" title="Mức gợi ý">
+              <option value="1">Coach: Mức 1</option>
+              <option value="2" selected>Coach: Mức 2</option>
+              <option value="3">Coach: Mức 3</option>
+            </select>
+
+            <div class="pill" style="gap:10px;">
+              <span style="font-weight:900;color:#0b3b7a">Tự gợi ý</span>
+              <span id="autoTog" class="toggle on" role="switch" aria-checked="true"></span>
+            </div>
+
+            <div class="think-pill">
+              <span style="font-weight:900;color:#0b3b7a">Tư duy</span>
+              <span id="thinkTog" class="toggle on" role="switch" aria-checked="true"></span>
+            </div>
+
+            <div class="scorePill" title="Điểm tư duy tăng khi tự gõ, giảm khi lạm dụng gợi ý">
+              <span>Điểm tư duy:</span> <b id="thinkScore">0</b>
+              <span>• PASS:</span> <b id="passCount">0</b>
+            </div>
+
+            <div class="spacer"></div>
+
+            <button class="btn" id="btnSample" title="Nạp input ví dụ">Input mẫu</button>
+            <button class="btn" id="btnClear" title="Xóa output/lỗi">Xóa output</button>
+            <button class="btn" id="btnCompare" title="So sánh Output với đáp án mẫu">So sánh Output</button>
+          </div>
+
+          <div id="todoBox" class="hintbox" style="margin-bottom:10px; display:none;">
+            <strong>Bài tập cần làm ngay</strong>
+            <div id="todoList" class="muted" style="color:#0b3b7a; line-height:1.55; margin-top:6px;">—</div>
+          
+          <div id="examBar" class="hintbox" style="margin-bottom:10px; display:none; background: rgba(255,251,235,.9); border-color: rgba(245,158,11,.35);">
+            <strong>Chế độ thi 15 phút</strong>
+            <div class="muted" style="color:#7c2d12; margin-top:6px; display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
+              <div><b id="examTimer">15:00</b> • Câu: <b id="examIdx">1</b>/<b id="examTotal">5</b> • Điểm: <b id="examScore">0</b></div>
+              <div style="display:flex; gap:8px;">
+                <button class="btn" id="btnSubmitExam" style="border-radius:999px; padding:8px 10px;">Nộp bài</button>
+                <button class="btn" id="btnExitExam" style="border-radius:999px; padding:8px 10px;">Thoát</button>
+              </div>
+            </div>
+          </div>
+
+          <div id="flowBox" class="hintbox" style="margin-bottom:10px; display:block;">
+            <strong>Quy trình làm bài</strong>
+            <div class="muted" style="color:#0b3b7a; margin-top:6px;">Làm theo thứ tự để rèn thói quen: <b>Đọc đề → Ý tưởng → Code → Test</b>.</div>
+            <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:10px;">
+              <button class="btn" id="stepRead" style="border-radius:999px; padding:8px 10px;">1) Đã đọc đề</button>
+              <button class="btn" id="stepIdea" style="border-radius:999px; padding:8px 10px;" disabled>2) Đã viết ý tưởng</button>
+              <button class="btn" id="stepCode" style="border-radius:999px; padding:8px 10px;" disabled>3) Đã viết code</button>
+              <button class="btn" id="stepTest" style="border-radius:999px; padding:8px 10px;" disabled>4) Đã Test</button>
+            </div>
+            <div style="margin-top:10px;">
+              <textarea id="ideaText" class="input" rows="3" style="width:100%; resize:vertical; border-radius:14px; padding:10px 12px;"
+                placeholder="Viết ngắn gọn ý tưởng: đầu vào là gì, xử lý thế nào, in ra gì…" disabled></textarea>
+              <div class="muted" id="flowHint" style="color:#0b3b7a; margin-top:6px;">Bắt đầu bằng việc bấm <b>1) Đã đọc đề</b>.</div>
+            </div>
+          </div>
+
+</div>
+
+
+          <div class="editor-wrap">
+            <textarea id="code" style="display:none;"></textarea>
+          </div>
+
+          <div class="guard">
+            <strong>Think-Guard (chống phụ thuộc) — Gợi ý theo tầng</strong>
+            <div class="muted" id="guardText" style="color:#0b3b7a">
+              Chọn tầng gợi ý.
+            </div>
+            <div class="stageRow">
+              <button class="stage active" data-stage="1">Tầng 1: Ý</button>
+              <button class="stage" data-stage="2">Tầng 2: Khung</button>
+              <button class="stage" data-stage="3">Tầng 3: Điền khuyết</button>
+              <button class="stage" data-stage="4">Tầng 4: Hoàn thiện dòng</button>
+            </div>
+            <div class="chips" id="guardChips"></div>
+          </div>
+
+          <div class="io">
+            <div>
+              <b>Input (stdin)</b>
+              <div class="muted">Nhập dữ liệu đầu vào (nếu đề yêu cầu).</div>
+              <textarea id="stdin" placeholder="Ví dụ: 5&#10;3 7&#10;..."></textarea>
+            </div>
+            <div>
+              <b>Output / Lỗi</b>
+              <div class="muted">Kết quả chạy và lỗi hiển thị ở đây.</div>
+              <div class="console" id="console">⏳ Đang tải môi trường Python…</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tabs">
+          <div class="tab active" data-tab="task">Đề</div>
+          <div class="tab" data-tab="coach">Coach</div>
+          <div class="tab" data-tab="tests">Test</div>
+          <div class="tab" data-tab="custom">Tự ra đề</div>
+                    <div class="tab" data-tab="video">Video</div>
+<div class="tab" data-tab="log">Nhật ký</div>
+        </div>
+
+        <div class="panel active" id="panel-task">
+          <div class="hintbox">
+            <strong>Đề bài</strong>
+            <div id="taskText" class="muted" style="color:#0b3b7a; line-height:1.55">—</div>
+            <div>
+              <span class="chip" id="chipIn">Input: —</span>
+              <span class="chip" id="chipOut">Output: —</span>
+              <span class="chip" id="chipSkill">Kỹ năng: —</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel" id="panel-coach">
+          <div class="hintbox">
+            <strong>Coach</strong>
+            <div id="coachHint" class="muted" style="color:#0b3b7a; line-height:1.55">
+              Dừng gõ 1.3s hoặc Run/Test để cập nhật gợi ý.
+            </div>
+            <ul class="ul" id="coachSteps"></ul>
+          </div>
+
+          <div class="sep"></div>
+
+          <b>Checklist tiến độ</b>
+          <div class="muted">Nhìn ✅/⬜ để biết còn thiếu bước nào.</div>
+          <div class="check" id="checklist"></div>
+
+          <div class="sep"></div>
+
+          <b>Lỗi hay gặp</b>
+          <ul class="ul" id="pitfalls"></ul>
+        </div>
+
+        <div class="panel" id="panel-tests">
+          <div class="hintbox">
+            <strong>Chấm tự động (Test cases)</strong>
+            <div class="muted" style="color:#0b3b7a; line-height:1.55">
+              Bấm <b>Test</b> để chấm PASS/FAIL theo bộ test.
+            </div>
+            <div class="sep"></div>
+            <div class="muted" id="testsInfo">—</div>
+          </div>
+        </div>
+
+        <div class="panel" id="panel-log">
+          <div class="hintbox">
+            <strong>Nhật ký học tập</strong>
+            <div class="muted" style="color:#0b3b7a; line-height:1.55">
+              Lưu tự động: thời gian, Run/Test, số lần dùng gợi ý, lỗi thường gặp, PASS/FAIL.
+            </div>
+            <div class="sep"></div>
+            <div class="muted" id="logView">—</div>
+          </div>
+        </div>
+
+        <div class="panel" id="panel-custom">
+          <div class="hintbox">
+            <strong>Tự ra đề (bài của em)</strong>
+            <div class="muted" style="color:#0b3b7a; line-height:1.55">
+              Nhập đề bài (mô tả + Input/Output + ví dụ). Nhấn <b>Phân tích</b> để nhận gợi ý theo 4 tầng (không đưa lời giải hoàn chỉnh).
+              Nhấn <b>Tạo bài &amp; làm ngay</b> để thêm vào danh sách bài (tự mở khóa cho riêng em).
+            </div>
+            <div class="sep"></div>
+
+            <div class="toolbar" style="gap:10px; flex-wrap:wrap;">
+              <select id="cpLevel" class="input" style="max-width:180px; padding:10px 12px;">
+                <option value="easy">Mức: Dễ</option>
+                <option value="hard">Mức: Khó</option>
+                <option value="adv">Mức: Nâng cao</option>
+              </select>
+              <input id="cpTitle" class="input" style="min-width:260px; padding:10px 12px;" placeholder="Tiêu đề bài (VD: Tính tổng chữ số)" />
+              <button class="btn" id="btnCpAnalyze">Phân tích</button>
+              <button class="btn primary" id="btnCpCreate">Tạo bài &amp; làm ngay</button>
+              <button class="btn" id="btnCpClear">Xóa nháp</button>
+            </div>
+
+            <div class="row" style="margin-top:10px;">
+              <div class="label">Mô tả đề bài</div>
+              <textarea id="cpText" class="input" style="min-height:110px; padding:10px 12px;" placeholder="Nhập mô tả đề bài..."></textarea>
+            </div>
+
+            <div class="row" style="margin-top:10px; display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+              <div>
+                <div class="label">Input</div>
+                <textarea id="cpInput" class="input" style="min-height:70px; padding:10px 12px;" placeholder="Mô tả input..."></textarea>
+              </div>
+              <div>
+                <div class="label">Output</div>
+                <textarea id="cpOutput" class="input" style="min-height:70px; padding:10px 12px;" placeholder="Mô tả output..."></textarea>
+              </div>
+            </div>
+
+            <div class="row" style="margin-top:10px; display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+              <div>
+                <div class="label">Ví dụ Input</div>
+                <textarea id="cpSampleIn" class="input" style="min-height:70px; padding:10px 12px;" placeholder="VD:\n5\n"></textarea>
+              </div>
+              <div>
+                <div class="label">Ví dụ Output</div>
+                <textarea id="cpSampleOut" class="input" style="min-height:70px; padding:10px 12px;" placeholder="VD:\n15\n"></textarea>
+              </div>
+            </div>
+
+            <div class="sep"></div>
+            <b>Kết quả phân tích &amp; gợi ý theo tầng</b>
+            <div class="muted" style="margin-top:6px;">Các gợi ý này cũng sẽ xuất hiện trong Think-Guard khi em đang code.</div>
+            <div class="sep"></div>
+            <div class="muted" id="cpAnalysisOut">—</div>
+
+            <div class="sep"></div>
+            <b>Bài tự tạo của em</b>
+            <div class="muted">Bấm để mở nhanh.</div>
+            <div class="chips" id="cpMyList" style="margin-top:8px;"></div>
+          </div>
+        </div>
+
+
+        <div class="panel" id="panel-video">
+          <div class="hintbox">
+            <strong>Video bài học</strong>
+            <div class="muted" style="color:#0b3b7a; line-height:1.55">
+              Chọn video phù hợp với bài đang học. Em có thể dán link video của mình (YouTube hoặc file mp4) để xem lại cách làm.
+            </div>
+            <div class="sep"></div>
+
+            <div class="row" style="gap:10px; align-items:end; flex-wrap:wrap">
+              <div style="min-width:220px; flex:1">
+                <div class="muted" style="margin-bottom:6px">Chọn video theo bài</div>
+                <select id="videoSelect" class="select" style="width:100%"></select>
+              </div>
+              <div style="min-width:260px; flex:2">
+                <div class="muted" style="margin-bottom:6px">Hoặc dán link video của em</div>
+                <input id="videoCustom" class="input" placeholder="Ví dụ: https://youtu.be/... hoặc https://.../video.mp4" style="width:100%"/>
+              </div>
+              <button id="videoApply" class="btn" style="height:40px; border-radius:999px">Mở video</button>
+            </div>
+
+            <div class="sep"></div>
+
+            <div class="videoWrap">
+              <div id="videoPlayer" class="videoPlayer muted">Chưa chọn video.</div>
+            </div>
+
+            <div class="muted" id="videoMeta" style="margin-top:10px">—</div>
+          </div>
+        </div>
+
+
+
+
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+</div>
+
+
+<!-- ===== TEACHER ROOT ===== -->
+<div id="teacherRoot" style="display:none;">
+  <div class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">
+        <div class="logo">GV</div>
+        <div>
+          <h1>Bảng điều khiển giáo viên — Lớp 10A1</h1>
+          <p>Giao bài • Theo dõi tiến độ • Tổng hợp lỗi • Báo cáo theo tuần</p>
+        </div>
+      </div>
+
+      <div class="pill" title="Tài khoản giáo viên" style="gap:10px;">
+        <span class="dot ok"></span>
+        <span id="teacherName">Giáo viên</span>
+        <button class="btn" id="btnTeacherLogout" style="padding:7px 10px; border-radius:999px; font-size:12px;">Đăng xuất</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="wrap">
+    <div class="grid" style="grid-template-columns: 1fr; gap:14px;">
+      <div class="card">
+        <div class="card-h">
+          <div class="title">
+            <h3>1) Giao bài tập cho học sinh</h3>
+            <p>Chọn bài, hạn nộp, ghi chú — hệ thống sẽ hiện “Bài tập cần làm ngay” ở phía học sinh.</p>
+          </div>
+        </div>
+        <div class="card-b">
+          <div class="toolbar" style="gap:10px; flex-wrap:wrap;">
+            <select id="asLesson"></select>
+            <select id="asTargetType" class="input" style="max-width:200px; padding:10px 12px;">
+              <option value="all" selected>Cả lớp</option>
+              <option value="class">Theo lớp</option>
+              <option value="group">Theo nhóm</option>
+              <option value="student">Theo mã HS</option>
+            </select>
+            <select id="asTargetValue" class="input" style="max-width:220px; padding:10px 12px;"></select>
+            <input id="asTargets" class="input" style="max-width:260px; padding:10px 12px; display:none;" placeholder="VD: hs1, hs2, hs3" />
+            <input id="asDue" class="input" style="max-width:200px; padding:10px 12px;" type="date" />
+            <input id="asTitle" class="input" style="min-width:260px; padding:10px 12px;" placeholder="Tên bài tập (tuỳ chọn)" />
+            <button class="btn primary" id="btnAssign">Giao bài</button>
+          </div>
+          <div class="row" style="margin-top:10px;">
+            <div class="label">Ghi chú cho học sinh</div>
+            <input id="asNote" class="input" placeholder="Ví dụ: Làm xong bấm Test để PASS. Chụp màn hình kết quả." />
+          </div>
+
+          <div class="sep"></div>
+          <b>Danh sách bài đã giao</b>
+          <div class="muted">Có thể xoá bài đã giao (chỉ ảnh hưởng hiển thị nhiệm vụ).</div>
+          <div id="asList" class="chips" style="margin-top:10px;"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-h">
+          <div class="title">
+            <h3>2) Theo dõi mức độ hoàn thiện theo bài tập</h3>
+            <p>Trạng thái: Hoàn thành (PASS) hoặc Chưa hoàn thành (kèm % checklist).</p>
+          </div>
+          <div class="toolbar">
+            <select id="filterClass" class="input" style="max-width:160px; padding:10px 12px;">
+              <option value="">Tất cả lớp</option>
+            </select>
+            <select id="filterGroup" class="input" style="max-width:150px; padding:10px 12px;">
+              <option value="">Tất cả nhóm</option>
+              <option value="1">Nhóm 1</option><option value="2">Nhóm 2</option><option value="3">Nhóm 3</option><option value="4">Nhóm 4</option>
+            </select>
+            <button class="btn" id="btnClearFilters">Bỏ lọc</button>
+
+            <button class="btn" id="btnRefreshTeacher">Làm mới</button>
+            <button class="btn" id="btnExportTeacherCSV">Xuất báo cáo CSV</button>
+          </div>
+        </div>
+        <div class="card-b">
+          <div class="kpi" id="kpiBox"></div>
+          <div class="sep"></div>
+          <div class="tableWrap">
+            <table class="table" id="tbMonitor">
+              <thead><tr id="tbHead"></tr></thead>
+              <tbody id="tbBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-h">
+          <div class="title">
+            <h3>3) Tổng hợp lỗi hay sai (7 ngày gần nhất)</h3>
+            <p>Tự tổng hợp từ nhật ký Run/Test của học sinh.</p>
+          </div>
+        </div>
+        <div class="card-b">
+          <div id="errStats" class="chips"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-h">
+          <div class="title">
+            <h3>4) Báo cáo kết quả sau 1 tuần</h3>
+            <p>Thống kê: số lần Run/Test, số bài PASS, mức sử dụng gợi ý — hỗ trợ nhận xét cuối tuần.</p>
+          </div>
+        </div>
+        <div class="card-b">
+          <div class="tableWrap" style="max-height:360px;">
+            <table class="table" id="tbWeek">
+              <thead>
+                <tr>
+                  <th>Mã HS</th><th>Họ tên</th><th>Lớp</th><th>Nhóm</th>
+                  <th>PASS (7 ngày)</th><th>Điểm (7 ngày)</th><th>Bài đã làm</th><th>Run</th><th>Test</th>
+                  <th>Paste %</th><th>Cảnh báo</th><th>Rubric TB</th>
+                  <th>Dùng gợi ý</th><th>Dùng hoàn thiện dòng</th><th>Hoạt động gần nhất</th>
+</tr>
+              </thead>
+              <tbody id="tbWeekBody"></tbody>
+            </table>
+          </div>
+          <div class="sep"></div>
+          <div class="muted" id="weekNote">—</div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-h">
+          <div class="title">
+            <h3>5) Trợ giúp câu hỏi của học sinh</h3>
+            <p>Danh sách câu hỏi gửi từ học sinh (kèm code và lỗi gần nhất).</p>
+          </div>
+          <div class="actions">
+            <button class="btn" id="btnRefreshHelp">Làm mới</button>
+            <button class="btn ghost" id="btnClearHelpDone" title="Chỉ xoá các câu đã xử lý trên máy này">Xoá đã xử lý</button>
+          </div>
+        </div>
+        <div class="card-b">
+          
+          <div class="row" style="gap:10px; align-items:flex-start; margin-bottom:10px;">
+            <textarea id="helpImport" class="input" rows="2" placeholder="Dán 'Mã trợ giúp' học sinh gửi (nếu khác máy/trình duyệt) rồi bấm Nhập mã..."></textarea>
+            <div style="min-width:160px; display:flex; flex-direction:column; gap:8px;">
+              <button class="btn" id="btnImportHelp">Nhập mã</button>
+              <div class="muted" id="helpImportStatus">—</div>
+            </div>
+          </div>
+
+          <div class="tableWrap" style="max-height:260px;">
+            <table class="table" id="tbHelp">
+              <thead>
+                <tr>
+                  <th>Thời gian</th><th>Mã HS</th><th>Họ tên</th><th>Lớp</th><th>Nhóm</th>
+                  <th>Bài</th><th>Trạng thái</th><th>Ghi chú</th><th></th>
+                </tr>
+              </thead>
+              <tbody id="tbHelpBody"></tbody>
+            </table>
+          </div>
+
+          <div class="sep"></div>
+
+          <div id="helpDetail" style="display:none;">
+            <div class="row" style="gap:12px; align-items:flex-start;">
+              <div style="flex:1;">
+                <div class="muted" id="helpMeta">—</div>
+                <pre class="code" id="helpCode" style="max-height:220px; overflow:auto; margin-top:8px;"></pre>
+                <pre class="code" id="helpErr" style="max-height:140px; overflow:auto; margin-top:8px; border-color:rgba(239,68,68,.3);"></pre>
+              </div>
+              <div style="min-width:280px;">
+                <label class="muted" style="display:block;margin-bottom:6px;">Phản hồi cho học sinh</label>
+                <textarea id="helpReply" class="input" rows="8" placeholder="Gợi ý theo từng bước, không đưa đáp án hoàn chỉnh..."></textarea>
+                <div style="display:flex; gap:8px; margin-top:10px;">
+                  <button class="btn primary" id="btnSendReply">Gửi phản hồi</button>
+                  <button class="btn ghost" id="btnCloseDetail">Đóng</button>
+                </div>
+                <div class="muted" id="helpReplyStatus" style="margin-top:8px;">—</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+
+    </div>
+  </div>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+<!-- Python runtime (offline, không phụ thuộc tải WASM/CDN) -->
+<script src="./vendor/skulpt/skulpt.min.js"></script>
+<script src="./vendor/skulpt/skulpt-stdlib.js"></script>
+
+<script src="./00_login.js"></script>
+<script src="./01_student.js"></script>
+<script src="./02_teacher.js"></script>
+<script src="./03_patches.js"></script>
+</body>
+</html>
